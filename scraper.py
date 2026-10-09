@@ -13,8 +13,15 @@ HEADERS = {
 }
 
 
+def add_rss_item(channel, title_text, pub_date):
+  """Helper to append an individual <item> tag with a <title>."""
+  item = ET.SubElement(channel, "item")
+  ET.SubElement(item, "title").text = title_text
+  ET.SubElement(item, "pubDate").text = pub_date
+
+
 def generate_rss(cash_rows, cc_rows, today):
-  """Generates formatted RSS XML feed with separate Cash and Credit Card sections."""
+  """Generates RSS feed where each requested line is its own <item> tag."""
   rss = ET.Element("rss", version="2.0")
   channel = ET.SubElement(rss, "channel")
 
@@ -24,27 +31,19 @@ def generate_rss(cash_rows, cc_rows, today):
       f"Daily heating oil prices updated on {today}"
   )
 
-  item = ET.SubElement(channel, "item")
-  ET.SubElement(item, "title").text = f"Oil Prices for {today}"
+  pub_date = datetime.datetime.utcnow().strftime("%a, %d %b %Y %H:%M:%S GMT")
 
-  description_lines = []
-
+  # 1. Cash Prices Section
   if cash_rows:
-    description_lines.append("cash prices")
+    add_rss_item(channel, "cash prices", pub_date)
     for qty, price in cash_rows:
-      description_lines.append(f"{qty}: {price}")
+      add_rss_item(channel, f"{qty}: {price}", pub_date)
 
+  # 2. Credit Card Prices Section
   if cc_rows:
-    if description_lines:
-      description_lines.append("")  # Blank line separator
-    description_lines.append("credit card prices")
+    add_rss_item(channel, "credit card prices", pub_date)
     for qty, price in cc_rows:
-      description_lines.append(f"{qty}: {price}")
-
-  ET.SubElement(item, "description").text = "\n".join(description_lines)
-  ET.SubElement(item, "pubDate").text = datetime.datetime.utcnow().strftime(
-      "%a, %d %b %Y %H:%M:%S GMT"
-  )
+      add_rss_item(channel, f"{qty}\t{price}", pub_date)
 
   tree = ET.ElementTree(rss)
   tree.write("feed.xml", encoding="utf-8", xml_declaration=True)
@@ -55,12 +54,10 @@ def extract_table_data(heading_element):
   if not heading_element:
     return []
 
-  # Find the container/table immediately associated with this header
   parent_tr = heading_element.find_parent("tr")
   if not parent_tr:
     return []
 
-  # Find the price rows table right below the header row
   next_table = parent_tr.find_next("table")
   if not next_table:
     return []
@@ -84,13 +81,11 @@ def scrape_prices():
   soup = BeautifulSoup(response.content, "html.parser")
   today = datetime.date.today().strftime("%Y-%m-%d")
 
-  # Find the first 'Cash Prices' header element
   cash_heading = soup.find(
       lambda tag: tag.name in ["td", "th", "font", "b"]
       and "cash prices" in tag.text.lower()
   )
 
-  # Find the first 'Credit Card Prices' header element
   cc_heading = soup.find(
       lambda tag: tag.name in ["td", "th", "font", "b"]
       and "credit card prices" in tag.text.lower()
@@ -100,7 +95,7 @@ def scrape_prices():
   cc_rows = extract_table_data(cc_heading)
 
   if cash_rows or cc_rows:
-    # 1. Save CSV
+    # Save CSV
     combined = [("Cash", qty, price) for qty, price in cash_rows] + [
         ("Credit Card", qty, price) for qty, price in cc_rows
     ]
@@ -108,9 +103,9 @@ def scrape_prices():
     df["Date"] = today
     df.to_csv(f"prices_{today}.csv", index=False)
 
-    # 2. Save RSS
+    # Save RSS
     generate_rss(cash_rows, cc_rows, today)
-    print(f"[{today}] Updated feed.xml and CSV cleanly.")
+    print(f"[{today}] Generated individual RSS items in feed.xml")
   else:
     print("Could not locate price tables.")
 
