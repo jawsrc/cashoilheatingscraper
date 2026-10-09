@@ -25,7 +25,7 @@ def add_rss_item(channel, title_text, pub_date, item_id, today):
 
 
 def generate_rss(cash_rows, cc_rows, today):
-  """Generates RSS feed where each line has a unique timestamp and GUID."""
+  """Generates a single RSS item containing the full price sheet formatted for Protopage."""
   rss = ET.Element("rss", version="2.0")
   channel = ET.SubElement(rss, "channel")
 
@@ -35,42 +35,31 @@ def generate_rss(cash_rows, cc_rows, today):
       f"Daily heating oil prices updated on {today}"
   )
 
-  base_time = datetime.datetime.now(datetime.timezone.utc)
-  item_counter = 0
+  item = ET.SubElement(channel, "item")
+  ET.SubElement(item, "title").text = f"Oil Prices for {today}"
 
-  # 1. Cash Prices Section
+  # Format all lines cleanly with line breaks
+  lines = []
   if cash_rows:
-    item_time = (base_time + datetime.timedelta(seconds=item_counter)).strftime(
-        "%a, %d %b %Y %H:%M:%S GMT"
-    )
-    add_rss_item(channel, "cash prices", item_time, item_counter, today)
-    item_counter += 1
-
+    lines.append("cash prices")
     for qty, price in cash_rows:
-      item_time = (
-          base_time + datetime.timedelta(seconds=item_counter)
-      ).strftime("%a, %d %b %Y %H:%M:%S GMT")
-      add_rss_item(channel, f"{qty}: {price}", item_time, item_counter, today)
-      item_counter += 1
+      lines.append(f"{qty}: {price}")
 
-  # 2. Credit Card Prices Section
   if cc_rows:
-    item_time = (base_time + datetime.timedelta(seconds=item_counter)).strftime(
-        "%a, %d %b %Y %H:%M:%S GMT"
-    )
-    add_rss_item(channel, "credit card prices", item_time, item_counter, today)
-    item_counter += 1
-
+    if lines:
+      lines.append("")  # Blank line separator
+    lines.append("credit card prices")
     for qty, price in cc_rows:
-      item_time = (
-          base_time + datetime.timedelta(seconds=item_counter)
-      ).strftime("%a, %d %b %Y %H:%M:%S GMT")
-      add_rss_item(channel, f"{qty}\t{price}", item_time, item_counter, today)
-      item_counter += 1
+      lines.append(f"{qty}: {price}")
+
+  # Join lines with <br> tags for HTML preview rendering in Protopage
+  ET.SubElement(item, "description").text = "<br>".join(lines)
+  ET.SubElement(item, "pubDate").text = datetime.datetime.now(
+      datetime.timezone.utc
+  ).strftime("%a, %d %b %Y %H:%M:%S GMT")
 
   tree = ET.ElementTree(rss)
   tree.write("feed.xml", encoding="utf-8", xml_declaration=True)
-
 
 def extract_table_data(heading_element):
   """Finds the closest table right after a header element and extracts quantity/price rows."""
