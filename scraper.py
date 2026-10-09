@@ -23,9 +23,8 @@ def add_rss_item(channel, title_text, pub_date, item_id, today):
 
   ET.SubElement(item, "pubDate").text = pub_date
 
-
 def generate_rss(cash_rows, cc_rows, today):
-  """Generates a single RSS item formatted cleanly with plain text line breaks for Protopage."""
+  """Generates a single RSS item using bullet separators for Protopage compatibility."""
   rss = ET.Element("rss", version="2.0")
   channel = ET.SubElement(rss, "channel")
 
@@ -38,21 +37,20 @@ def generate_rss(cash_rows, cc_rows, today):
   item = ET.SubElement(channel, "item")
   ET.SubElement(item, "title").text = f"Oil Prices ({today})"
 
-  # Format using plain newline characters (\n)
-  lines = []
+  parts = []
 
   if cash_rows:
-    lines.append("CASH:")
-    for qty, price in cash_rows:
-      lines.append(f"{qty}: {price}")
+    cash_str = "CASH: " + " • ".join([f"{qty}: {price}" for qty, price in cash_rows])
+    parts.append(cash_str)
 
   if cc_rows:
-    lines.append("\nCREDIT CARD:")
-    for qty, price in cc_rows:
-      lines.append(f"{qty}: {price}")
+    cc_str = "CREDIT CARD: " + " • ".join(
+        [f"{qty}: {price}" for qty, price in cc_rows]
+    )
+    parts.append(cc_str)
 
-  # Join with standard line breaks
-  ET.SubElement(item, "description").text = "\n".join(lines)
+  # Separate Cash and Credit Card sections with double space or line break
+  ET.SubElement(item, "description").text = "  |  ".join(parts)
   ET.SubElement(item, "pubDate").text = datetime.datetime.now(
       datetime.timezone.utc
   ).strftime("%a, %d %b %Y %H:%M:%S GMT")
