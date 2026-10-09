@@ -12,12 +12,27 @@ HEADERS = {
     )
 }
 
+import datetime
+import xml.etree.ElementTree as ET
+import pandas as pd
+import requests
+from bs4 import BeautifulSoup
+
+URL = "url?id=210"
+HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML,"
+        " like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    )
+}
+
+
 def add_rss_item(channel, title_text, pub_date, item_id, today):
-  """Helper to append an individual <item> tag with a date-unique GUID."""
+  """Appends an individual <item> with a unique timestamp and GUID."""
   item = ET.SubElement(channel, "item")
   ET.SubElement(item, "title").text = title_text
 
-  # Include today's date so every daily update generates fresh, unique GUIDs
+  # Unique GUID for every daily run prevents feed aggregators from collapsing entries
   guid = ET.SubElement(item, "guid", isPermaLink="false")
   guid.text = f"oil-price-{today}-{item_id}"
 
@@ -25,7 +40,7 @@ def add_rss_item(channel, title_text, pub_date, item_id, today):
 
 
 def generate_rss(cash_rows, cc_rows, today):
-  """Generates RSS feed where each line is an individual item with date-stamped GUIDs."""
+  """Generates RSS feed where each line has a staggered timestamp and unique GUID."""
   rss = ET.Element("rss", version="2.0")
   channel = ET.SubElement(rss, "channel")
 
@@ -40,6 +55,7 @@ def generate_rss(cash_rows, cc_rows, today):
 
   # 1. Cash Prices Section
   if cash_rows:
+    # Stagger timestamps by 1 second per item so RSS readers treat them as separate posts
     item_time = (base_time + datetime.timedelta(seconds=item_counter)).strftime(
         "%a, %d %b %Y %H:%M:%S GMT"
     )
