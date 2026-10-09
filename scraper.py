@@ -12,27 +12,12 @@ HEADERS = {
     )
 }
 
-import datetime
-import xml.etree.ElementTree as ET
-import pandas as pd
-import requests
-from bs4 import BeautifulSoup
-
-URL = "url?id=210"
-HEADERS = {
-    "User-Agent": (
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML,"
-        " like Gecko) Chrome/120.0.0.0 Safari/537.36"
-    )
-}
-
 
 def add_rss_item(channel, title_text, pub_date, item_id, today):
-  """Appends an individual <item> with a unique timestamp and GUID."""
+  """Appends an individual <item> with a date-stamped GUID."""
   item = ET.SubElement(channel, "item")
   ET.SubElement(item, "title").text = title_text
 
-  # Unique GUID for every daily run prevents feed aggregators from collapsing entries
   guid = ET.SubElement(item, "guid", isPermaLink="false")
   guid.text = f"oil-price-{today}-{item_id}"
 
@@ -40,7 +25,7 @@ def add_rss_item(channel, title_text, pub_date, item_id, today):
 
 
 def generate_rss(cash_rows, cc_rows, today):
-  """Generates RSS feed where each line has a staggered timestamp and unique GUID."""
+  """Generates RSS feed where each line has a unique timestamp and GUID."""
   rss = ET.Element("rss", version="2.0")
   channel = ET.SubElement(rss, "channel")
 
@@ -50,12 +35,11 @@ def generate_rss(cash_rows, cc_rows, today):
       f"Daily heating oil prices updated on {today}"
   )
 
-  base_time = datetime.datetime.utcnow()
+  base_time = datetime.datetime.now(datetime.timezone.utc)
   item_counter = 0
 
   # 1. Cash Prices Section
   if cash_rows:
-    # Stagger timestamps by 1 second per item so RSS readers treat them as separate posts
     item_time = (base_time + datetime.timedelta(seconds=item_counter)).strftime(
         "%a, %d %b %Y %H:%M:%S GMT"
     )
@@ -86,6 +70,7 @@ def generate_rss(cash_rows, cc_rows, today):
 
   tree = ET.ElementTree(rss)
   tree.write("feed.xml", encoding="utf-8", xml_declaration=True)
+
 
 def extract_table_data(heading_element):
   """Finds the closest table right after a header element and extracts quantity/price rows."""
@@ -133,7 +118,6 @@ def scrape_prices():
   cc_rows = extract_table_data(cc_heading)
 
   if cash_rows or cc_rows:
-    # Save CSV
     combined = [("Cash", qty, price) for qty, price in cash_rows] + [
         ("Credit Card", qty, price) for qty, price in cc_rows
     ]
@@ -141,7 +125,6 @@ def scrape_prices():
     df["Date"] = today
     df.to_csv(f"prices_{today}.csv", index=False)
 
-    # Save RSS
     generate_rss(cash_rows, cc_rows, today)
     print(f"[{today}] Generated individual RSS items in feed.xml")
   else:
