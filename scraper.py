@@ -12,20 +12,20 @@ HEADERS = {
     )
 }
 
-def add_rss_item(channel, title_text, pub_date, item_id):
-  """Helper to append an individual <item> tag with a unique GUID and timestamp."""
+def add_rss_item(channel, title_text, pub_date, item_id, today):
+  """Helper to append an individual <item> tag with a date-unique GUID."""
   item = ET.SubElement(channel, "item")
   ET.SubElement(item, "title").text = title_text
 
-  # Unique GUID prevents readers from deduplicating items
+  # Include today's date so every daily update generates fresh, unique GUIDs
   guid = ET.SubElement(item, "guid", isPermaLink="false")
-  guid.text = f"oil-price-{item_id}"
+  guid.text = f"oil-price-{today}-{item_id}"
 
   ET.SubElement(item, "pubDate").text = pub_date
 
 
 def generate_rss(cash_rows, cc_rows, today):
-  """Generates RSS feed where each line is an individual item with unique GUIDs."""
+  """Generates RSS feed where each line is an individual item with date-stamped GUIDs."""
   rss = ET.Element("rss", version="2.0")
   channel = ET.SubElement(rss, "channel")
 
@@ -40,18 +40,17 @@ def generate_rss(cash_rows, cc_rows, today):
 
   # 1. Cash Prices Section
   if cash_rows:
-    # Offset time by 1 second per item so they order correctly in the reader
     item_time = (base_time + datetime.timedelta(seconds=item_counter)).strftime(
         "%a, %d %b %Y %H:%M:%S GMT"
     )
-    add_rss_item(channel, "cash prices", item_time, item_counter)
+    add_rss_item(channel, "cash prices", item_time, item_counter, today)
     item_counter += 1
 
     for qty, price in cash_rows:
       item_time = (
           base_time + datetime.timedelta(seconds=item_counter)
       ).strftime("%a, %d %b %Y %H:%M:%S GMT")
-      add_rss_item(channel, f"{qty}: {price}", item_time, item_counter)
+      add_rss_item(channel, f"{qty}: {price}", item_time, item_counter, today)
       item_counter += 1
 
   # 2. Credit Card Prices Section
@@ -59,19 +58,18 @@ def generate_rss(cash_rows, cc_rows, today):
     item_time = (base_time + datetime.timedelta(seconds=item_counter)).strftime(
         "%a, %d %b %Y %H:%M:%S GMT"
     )
-    add_rss_item(channel, "credit card prices", item_time, item_counter)
+    add_rss_item(channel, "credit card prices", item_time, item_counter, today)
     item_counter += 1
 
     for qty, price in cc_rows:
       item_time = (
           base_time + datetime.timedelta(seconds=item_counter)
       ).strftime("%a, %d %b %Y %H:%M:%S GMT")
-      add_rss_item(channel, f"{qty}\t{price}", item_time, item_counter)
+      add_rss_item(channel, f"{qty}\t{price}", item_time, item_counter, today)
       item_counter += 1
 
   tree = ET.ElementTree(rss)
   tree.write("feed.xml", encoding="utf-8", xml_declaration=True)
-
 
 def extract_table_data(heading_element):
   """Finds the closest table right after a header element and extracts quantity/price rows."""
