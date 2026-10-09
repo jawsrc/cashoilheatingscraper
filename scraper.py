@@ -50,16 +50,29 @@ def generate_rss(cash_rows, cc_rows, today):
   tree.write("feed.xml", encoding="utf-8", xml_declaration=True)
 
 
-def parse_rows(table):
-  """Extracts gallon tiers and prices from a specific price table."""
-  rows = []
-  for row in table.find_all("tr"):
+def extract_table_data(heading_element):
+  """Finds the closest table right after a header element and extracts quantity/price rows."""
+  if not heading_element:
+    return []
+
+  # Find the container/table immediately associated with this header
+  parent_tr = heading_element.find_parent("tr")
+  if not parent_tr:
+    return []
+
+  # Find the price rows table right below the header row
+  next_table = parent_tr.find_next("table")
+  if not next_table:
+    return []
+
+  data = []
+  for row in next_table.find_all("tr"):
     cols = [ele.text.strip() for ele in row.find_all(["td", "th"])]
     if len(cols) >= 2 and any(char.isdigit() for char in cols[1]):
-      # Avoid header or duplicate label rows
       if "Gallons" not in cols[0]:
-        rows.append((cols[0], cols[1]))
-  return rows
+        data.append((cols[0], cols[1]))
+
+  return data
 
 
 def scrape_prices():
@@ -71,23 +84,20 @@ def scrape_prices():
   soup = BeautifulSoup(response.content, "html.parser")
   today = datetime.date.today().strftime("%Y-%m-%d")
 
-  cash_rows = []
-  cc_rows = []
+  # Find the first 'Cash Prices' header element
+  cash_heading = soup.find(
+      lambda tag: tag.name in ["td", "th", "font", "b"]
+      and "cash prices" in tag.text.lower()
+  )
 
-  # Find all table tags on the page
-  tables = soup.find_all("table")
+  # Find the first 'Credit Card Prices' header element
+  cc_heading = soup.find(
+      lambda tag: tag.name in ["td", "th", "font", "b"]
+      and "credit card prices" in tag.text.lower()
+  )
 
-  for table in tables:
-    text = table.text.lower()
-
-    # Match exact Cash block without grabbing nested credit card tables
-    if "cash prices" in text and "credit card prices" not in text and not cash_rows:
-      cash_rows = parse_rows(table)
-    elif "credit card prices" in text and not cc_rows:
-      cc_rows = parse_rows(table)
-
-    if cash_rows and cc_rows:
-      break
+  cash_rows = extract_table_data(cash_heading)
+  cc_rows = extract_table_data(cc_heading)
 
   if cash_rows or cc_rows:
     # 1. Save CSV
@@ -100,7 +110,7 @@ def scrape_prices():
 
     # 2. Save RSS
     generate_rss(cash_rows, cc_rows, today)
-    print(f"[{today}] Updated feed.xml and CSV without duplicates.")
+    print(f"[{today}] Updated feed.xml and CSV cleanly.")
   else:
     print("Could not locate price tables.")
 
