@@ -27,7 +27,6 @@ def generate_rss(cash_rows, cc_rows, today):
   item = ET.SubElement(channel, "item")
   ET.SubElement(item, "title").text = f"Oil Prices for {today}"
 
-  # Format output to match requested layout
   description_lines = []
 
   if cash_rows:
@@ -51,14 +50,16 @@ def generate_rss(cash_rows, cc_rows, today):
   tree.write("feed.xml", encoding="utf-8", xml_declaration=True)
 
 
-def parse_price_table(table):
-  """Extracts tier quantities and prices from a price table."""
-  data = []
+def parse_rows(table):
+  """Extracts gallon tiers and prices from a specific price table."""
+  rows = []
   for row in table.find_all("tr"):
     cols = [ele.text.strip() for ele in row.find_all(["td", "th"])]
     if len(cols) >= 2 and any(char.isdigit() for char in cols[1]):
-      data.append((cols[0], cols[1]))
-  return data
+      # Avoid header or duplicate label rows
+      if "Gallons" not in cols[0]:
+        rows.append((cols[0], cols[1]))
+  return rows
 
 
 def scrape_prices():
@@ -70,22 +71,21 @@ def scrape_prices():
   soup = BeautifulSoup(response.content, "html.parser")
   today = datetime.date.today().strftime("%Y-%m-%d")
 
-  # Target only the first listing's container/tables on the page
   cash_rows = []
   cc_rows = []
 
-  # Find the tables containing price listings
+  # Find all table tags on the page
   tables = soup.find_all("table")
 
-  # Loop through tables and stop once we extract the first Cash & CC tables
-  for i, table in enumerate(tables):
+  for table in tables:
     text = table.text.lower()
-    if "cash prices" in text and not cash_rows:
-      cash_rows = parse_price_table(table)
-    elif "credit card prices" in text and not cc_rows:
-      cc_rows = parse_price_table(table)
 
-    # Stop parsing after getting the first listing's cash and credit card tables
+    # Match exact Cash block without grabbing nested credit card tables
+    if "cash prices" in text and "credit card prices" not in text and not cash_rows:
+      cash_rows = parse_rows(table)
+    elif "credit card prices" in text and not cc_rows:
+      cc_rows = parse_rows(table)
+
     if cash_rows and cc_rows:
       break
 
@@ -98,11 +98,11 @@ def scrape_prices():
     df["Date"] = today
     df.to_csv(f"prices_{today}.csv", index=False)
 
-    # 2. Generate formatted RSS Feed
+    # 2. Save RSS
     generate_rss(cash_rows, cc_rows, today)
-    print(f"[{today}] Successfully updated CSV and feed.xml with 1st listing.")
+    print(f"[{today}] Updated feed.xml and CSV without duplicates.")
   else:
-    print("Could not find price tables for the first listing.")
+    print("Could not locate price tables.")
 
 
 if __name__ == "__main__":
