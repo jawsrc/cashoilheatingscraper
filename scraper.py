@@ -25,7 +25,7 @@ def add_rss_item(channel, title_text, pub_date, item_id, today):
 
 
 def generate_rss(cash_rows, cc_rows, today):
-  """Generates a single RSS item containing the full price sheet formatted for Protopage."""
+  """Generates a single RSS item formatted cleanly with plain text line breaks for Protopage."""
   rss = ET.Element("rss", version="2.0")
   channel = ET.SubElement(rss, "channel")
 
@@ -36,31 +36,30 @@ def generate_rss(cash_rows, cc_rows, today):
   )
 
   item = ET.SubElement(channel, "item")
-  ET.SubElement(item, "title").text = f"Oil Prices for {today}"
+  ET.SubElement(item, "title").text = f"Oil Prices ({today})"
 
-  # Format all lines cleanly with line breaks
+  # Format using plain newline characters (\n)
   lines = []
+
   if cash_rows:
-    lines.append("cash prices")
+    lines.append("CASH:")
     for qty, price in cash_rows:
       lines.append(f"{qty}: {price}")
 
   if cc_rows:
-    if lines:
-      lines.append("")  # Blank line separator
-    lines.append("credit card prices")
+    lines.append("\nCREDIT CARD:")
     for qty, price in cc_rows:
       lines.append(f"{qty}: {price}")
 
-  # Join lines with <br> tags for HTML preview rendering in Protopage
-  ET.SubElement(item, "description").text = "<br>".join(lines)
+  # Join with standard line breaks
+  ET.SubElement(item, "description").text = "\n".join(lines)
   ET.SubElement(item, "pubDate").text = datetime.datetime.now(
       datetime.timezone.utc
   ).strftime("%a, %d %b %Y %H:%M:%S GMT")
 
   tree = ET.ElementTree(rss)
   tree.write("feed.xml", encoding="utf-8", xml_declaration=True)
-
+    
 def extract_table_data(heading_element):
   """Finds the closest table right after a header element and extracts quantity/price rows."""
   if not heading_element:
