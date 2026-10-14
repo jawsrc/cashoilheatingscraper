@@ -57,33 +57,36 @@ def update_history_json(today, cash_rows, cc_rows):
 
 
 def get_lowest_price_history(days=7):
-  """Reads daily CSV files and extracts the lowest price for the last N days."""
-  csv_files = sorted(glob.glob("prices_*.csv"))
-  history = []
+  """Reads the master history.json file and returns the lowest price log for the last N days."""
+  history_file = "history.json"
+  if not os.path.exists(history_file):
+    return []
 
-  for file_path in reversed(csv_files):
-    try:
-      df = pd.read_csv(file_path)
-      if "Price" in df.columns and "Date" in df.columns:
-        df["Price_Numeric"] = (
-            df["Price"]
-            .astype(str)
-            .str.replace("$", "", regex=False)
-            .str.strip()
-            .astype(float)
-        )
-        min_row = df.loc[df["Price_Numeric"].idxmin()]
-        date_str = str(min_row["Date"])
-        min_price = f"${min_row['Price_Numeric']:.2f}"
+  try:
+    with open(history_file, "r") as f:
+      history_data = json.load(f)
 
-        history.append(f"{date_str}: {min_price}")
+    # Grab the last `days` entries (newest last in list)
+    recent_entries = history_data[-days:]
+    history_logs = []
 
-        if len(history) == days:
-          break
-    except Exception as e:
-      print(f"Error parsing {file_path}: {e}")
+    # Format from newest to oldest for the feed
+    for entry in reversed(recent_entries):
+      date_str = entry.get("date", "")
+      # Pick the lowest of cash or credit card price for that date
+      prices = [
+          p
+          for p in [entry.get("lowest_cash"), entry.get("lowest_cc")]
+          if p is not None
+      ]
+      if prices:
+        min_price = min(prices)
+        history_logs.append(f"{date_str}: ${min_price:.2f}")
 
-  return history
+    return history_logs
+  except Exception as e:
+    print(f"Error reading {history_file}: {e}")
+    return []
 
 
 def add_rss_item(channel, title, description, pub_date, guid_str, link_url):
