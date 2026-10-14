@@ -1,5 +1,6 @@
 import datetime
 import glob
+import json
 import os
 import xml.etree.ElementTree as ET
 import pandas as pd
@@ -15,17 +16,55 @@ HEADERS = {
 }
 
 
+def update_history_json(today, cash_rows, cc_rows):
+  """Appends daily minimum prices to a master history.json file for web charts."""
+  history_file = "history.json"
+  history_data = []
+
+  if os.path.exists(history_file):
+    try:
+      with open(history_file, "r") as f:
+        history_data = json.load(f)
+    except Exception:
+      history_data = []
+
+  # Parse lowest cash and credit card prices
+  lowest_cash = (
+      min([float(price.replace("$", "").strip()) for _, price in cash_rows])
+      if cash_rows
+      else None
+  )
+  lowest_cc = (
+      min([float(price.replace("$", "").strip()) for _, price in cc_rows])
+      if cc_rows
+      else None
+  )
+
+  # Overwrite today's entry if re-run on the same day
+  history_data = [item for item in history_data if item.get("date") != today]
+
+  history_data.append({
+      "date": today,
+      "lowest_cash": lowest_cash,
+      "lowest_cc": lowest_cc,
+  })
+
+  # Keep entries sorted chronologically
+  history_data.sort(key=lambda x: x["date"])
+
+  with open(history_file, "w") as f:
+    json.dump(history_data, f, indent=2)
+
+
 def get_lowest_price_history(days=7):
-  """Reads saved daily CSV files and extracts the lowest price for each of the last `days` days."""
+  """Reads daily CSV files and extracts the lowest price for the last N days."""
   csv_files = sorted(glob.glob("prices_*.csv"))
   history = []
 
-  # Process CSV files from newest to oldest
   for file_path in reversed(csv_files):
     try:
       df = pd.read_csv(file_path)
       if "Price" in df.columns and "Date" in df.columns:
-        # Clean price column to extract numeric float values
         df["Price_Numeric"] = (
             df["Price"]
             .astype(str)
@@ -37,7 +76,6 @@ def get_lowest_price_history(days=7):
         date_str = str(min_row["Date"])
         min_price = f"${min_row['Price_Numeric']:.2f}"
 
-        # Formats cleanly as 'YYYY-MM-DD: $X.XX' without extra details
         history.append(f"{date_str}: {min_price}")
 
         if len(history) == days:
@@ -47,8 +85,9 @@ def get_lowest_price_history(days=7):
 
   return history
 
+
 def add_rss_item(channel, title, description, pub_date, guid_str, link_url):
-  """Helper function to create an RSS <item> tag with unique link and guid."""
+  """Appends an individual <item> tag to the RSS feed."""
   item = ET.SubElement(channel, "item")
   ET.SubElement(item, "title").text = title
   ET.SubElement(item, "link").text = link_url
@@ -59,8 +98,9 @@ def add_rss_item(channel, title, description, pub_date, guid_str, link_url):
 
   ET.SubElement(item, "pubDate").text = pub_date
 
+
 def generate_rss(cash_rows, cc_rows, today):
-  """Generates RSS feed with distinct links, timestamps, and GUIDs for Protopage compatibility."""
+  """Generates feed.xml containing Today's Prices and the 7-Day History Log."""
   rss = ET.Element("rss", version="2.0")
   channel = ET.SubElement(rss, "channel")
 
@@ -95,7 +135,7 @@ def generate_rss(cash_rows, cc_rows, today):
       link_url=f"{URL}#today-{today}",
   )
 
-  # Item 2: 7-Day Lowest Price Log
+  # Item 2: 7-Day Lowest Price History Log
   history_logs = get_lowest_price_history(days=7)
   if history_logs:
     item2_desc = "  •  ".join(history_logs)
@@ -114,8 +154,9 @@ def generate_rss(cash_rows, cc_rows, today):
   tree = ET.ElementTree(rss)
   tree.write("feed.xml", encoding="utf-8", xml_declaration=True)
 
+
 def extract_table_data(heading_element):
-  """Finds the closest table right after a header element and extracts quantity/price rows."""
+  """Extracts gallon tier and price columns from HTML tables."""
   if not heading_element:
     return []
 
@@ -160,6 +201,7 @@ def scrape_prices():
   cc_rows = extract_table_data(cc_heading)
 
   if cash_rows or cc_rows:
+    # 1. Save detailed daily CSV
     combined = [("Cash", qty, price) for qty, price in cash_rows] + [
         ("Credit Card", qty, price) for qty, price in cc_rows
     ]
@@ -169,11 +211,12 @@ def scrape_prices():
     df["Date"] = today
     df.to_csv(f"prices_{today}.csv", index=False)
 
+    # 2. Save master history.json for web dashboard
+    update_history_json(today, cash_rows, cc_rows)
+
+    # 3. Generate RSS feed for Protopage
     generate_rss(cash_rows, cc_rows, today)
-    print(
-        f"[{today}] Generated feed.xml with today's breakdown and 7-day history"
-        " log."
-    )
+    print(f"[{today}] Scrape complete: Saved CSV, history.json, and feed.xml")
   else:
     print("Could not locate price tables.")
 
