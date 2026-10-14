@@ -47,10 +47,11 @@ def get_lowest_price_history(days=7):
 
   return history
 
-def add_rss_item(channel, title, description, pub_date, guid_str):
-  """Helper function to create an RSS <item> tag."""
+def add_rss_item(channel, title, description, pub_date, guid_str, link_url):
+  """Helper function to create an RSS <item> tag with unique link and guid."""
   item = ET.SubElement(channel, "item")
   ET.SubElement(item, "title").text = title
+  ET.SubElement(item, "link").text = link_url
   ET.SubElement(item, "description").text = description
 
   guid = ET.SubElement(item, "guid", isPermaLink="false")
@@ -58,9 +59,8 @@ def add_rss_item(channel, title, description, pub_date, guid_str):
 
   ET.SubElement(item, "pubDate").text = pub_date
 
-
 def generate_rss(cash_rows, cc_rows, today):
-  """Generates RSS feed with Item 1 (Today's Prices) and Item 2 (7-Day Lowest Price Log)."""
+  """Generates RSS feed with distinct links, timestamps, and GUIDs for Protopage compatibility."""
   rss = ET.Element("rss", version="2.0")
   channel = ET.SubElement(rss, "channel")
 
@@ -92,13 +92,14 @@ def generate_rss(cash_rows, cc_rows, today):
       description=item1_desc,
       pub_date=item1_time,
       guid_str=f"oil-price-{today}-today",
+      link_url=f"{URL}#today-{today}",
   )
 
-  # Item 2: 7-Day Lowest Price History Log
+  # Item 2: 7-Day Lowest Price Log
   history_logs = get_lowest_price_history(days=7)
   if history_logs:
     item2_desc = "  •  ".join(history_logs)
-    item2_time = (base_time - datetime.timedelta(seconds=1)).strftime(
+    item2_time = (base_time - datetime.timedelta(seconds=60)).strftime(
         "%a, %d %b %Y %H:%M:%S GMT"
     )
     add_rss_item(
@@ -107,11 +108,11 @@ def generate_rss(cash_rows, cc_rows, today):
         description=item2_desc,
         pub_date=item2_time,
         guid_str=f"oil-price-{today}-history",
+        link_url=f"{URL}#history-{today}",
     )
 
   tree = ET.ElementTree(rss)
   tree.write("feed.xml", encoding="utf-8", xml_declaration=True)
-
 
 def extract_table_data(heading_element):
   """Finds the closest table right after a header element and extracts quantity/price rows."""
