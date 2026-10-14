@@ -1,4 +1,6 @@
 import datetime
+import glob
+import os
 import xml.etree.ElementTree as ET
 import pandas as pd
 import requests
@@ -13,18 +15,52 @@ HEADERS = {
 }
 
 
-def add_rss_item(channel, title_text, pub_date, item_id, today):
-  """Appends an individual <item> with a date-stamped GUID."""
+def get_lowest_price_history(days=7):
+  """Reads saved daily CSV files and extracts the lowest price for each of the last `days` days."""
+  csv_files = sorted(glob.glob("prices_*.csv"))
+  history = []
+
+  # Process CSV files from newest to oldest
+  for file_path in reversed(csv_files):
+    try:
+      df = pd.read_csv(file_path)
+      if "Price" in df.columns and "Date" in df.columns:
+        # Clean price column to extract numeric float values
+        df["Price_Numeric"] = (
+            df["Price"]
+            .astype(str)
+            .str.replace("$", "", regex=False)
+            .str.strip()
+            .astype(float)
+        )
+        min_row = df.loc[df["Price_Numeric"].idxmin()]
+        date_str = str(min_row["Date"])
+        min_price = f"${min_row['Price_Numeric']:.2f}"
+
+        # Formats cleanly as 'YYYY-MM-DD: $X.XX' without extra details
+        history.append(f"{date_str}: {min_price}")
+
+        if len(history) == days:
+          break
+    except Exception as e:
+      print(f"Error parsing {file_path}: {e}")
+
+  return history
+
+def add_rss_item(channel, title, description, pub_date, guid_str):
+  """Helper function to create an RSS <item> tag."""
   item = ET.SubElement(channel, "item")
-  ET.SubElement(item, "title").text = title_text
+  ET.SubElement(item, "title").text = title
+  ET.SubElement(item, "description").text = description
 
   guid = ET.SubElement(item, "guid", isPermaLink="false")
-  guid.text = f"oil-price-{today}-{item_id}"
+  guid.text = guid_str
 
   ET.SubElement(item, "pubDate").text = pub_date
 
+
 def generate_rss(cash_rows, cc_rows, today):
-  """Generates a single RSS item using bullet separators for Protopage compatibility."""
+  """Generates RSS feed with Item 1 (Today's Prices) and Item 2 (7-Day Lowest Price Log)."""
   rss = ET.Element("rss", version="2.0")
   channel = ET.SubElement(rss, "channel")
 
@@ -34,30 +70,49 @@ def generate_rss(cash_rows, cc_rows, today):
       f"Daily heating oil prices updated on {today}"
   )
 
-  item = ET.SubElement(channel, "item")
-  ET.SubElement(item, "title").text = f"Oil Prices ({today})"
+  base_time = datetime.datetime.now(datetime.timezone.utc)
 
+  # Item 1: Today's Full Price Breakdown
   parts = []
-
   if cash_rows:
-    cash_str = "CASH: " + " • ".join([f"{qty}: {price}" for qty, price in cash_rows])
-    parts.append(cash_str)
-
-  if cc_rows:
-    cc_str = "CREDIT CARD: " + " • ".join(
-        [f"{qty}: {price}" for qty, price in cc_rows]
+    parts.append(
+        "CASH: " + " • ".join([f"{qty}: {price}" for qty, price in cash_rows])
     )
-    parts.append(cc_str)
+  if cc_rows:
+    parts.append(
+        "CREDIT CARD: "
+        + " • ".join([f"{qty}: {price}" for qty, price in cc_rows])
+    )
 
-  # Separate Cash and Credit Card sections with double space or line break
-  ET.SubElement(item, "description").text = "  |  ".join(parts)
-  ET.SubElement(item, "pubDate").text = datetime.datetime.now(
-      datetime.timezone.utc
-  ).strftime("%a, %d %b %Y %H:%M:%S GMT")
+  item1_desc = "  |  ".join(parts)
+  item1_time = base_time.strftime("%a, %d %b %Y %H:%M:%S GMT")
+  add_rss_item(
+      channel,
+      title=f"Today's Prices ({today})",
+      description=item1_desc,
+      pub_date=item1_time,
+      guid_str=f"oil-price-{today}-today",
+  )
+
+  # Item 2: 7-Day Lowest Price History Log
+  history_logs = get_lowest_price_history(days=7)
+  if history_logs:
+    item2_desc = "  •  ".join(history_logs)
+    item2_time = (base_time - datetime.timedelta(seconds=1)).strftime(
+        "%a, %d %b %Y %H:%M:%S GMT"
+    )
+    add_rss_item(
+        channel,
+        title="7-Day Lowest Price Log",
+        description=item2_desc,
+        pub_date=item2_time,
+        guid_str=f"oil-price-{today}-history",
+    )
 
   tree = ET.ElementTree(rss)
   tree.write("feed.xml", encoding="utf-8", xml_declaration=True)
-    
+
+
 def extract_table_data(heading_element):
   """Finds the closest table right after a header element and extracts quantity/price rows."""
   if not heading_element:
@@ -107,12 +162,17 @@ def scrape_prices():
     combined = [("Cash", qty, price) for qty, price in cash_rows] + [
         ("Credit Card", qty, price) for qty, price in cc_rows
     ]
-    df = pd.DataFrame(combined, columns=["Payment Type", "Gallon Tier", "Price"])
+    df = pd.DataFrame(
+        combined, columns=["Payment Type", "Gallon Tier", "Price"]
+    )
     df["Date"] = today
     df.to_csv(f"prices_{today}.csv", index=False)
 
     generate_rss(cash_rows, cc_rows, today)
-    print(f"[{today}] Generated individual RSS items in feed.xml")
+    print(
+        f"[{today}] Generated feed.xml with today's breakdown and 7-day history"
+        " log."
+    )
   else:
     print("Could not locate price tables.")
 
