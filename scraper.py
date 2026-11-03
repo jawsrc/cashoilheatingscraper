@@ -6,7 +6,8 @@ import pandas as pd
 import requests
 from bs4 import BeautifulSoup
 
-URL = "https://www.cashheatingoil.com/oak_ridge_nj_oil_prices/07438"
+DASHBOARD_URL = "https://jawsrc.github.io/cashoilheatingscraper/"
+SOURCE_URL = "https://www.cashheatingoil.com/oak_ridge_nj_oil_prices/07438"
 HEADERS = {
     "User-Agent": (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML,"
@@ -106,14 +107,14 @@ def add_rss_item(channel, title, description, pub_date, guid_str, link_url):
 
   ET.SubElement(item, "pubDate").text = pub_date
 
-
 def generate_rss(cash_rows, cc_rows, today):
-  """Generates feed.xml with day-of-week formatting."""
+  """Generates feed.xml with channel linking to dashboard and item titles linking to CashHeatingOil."""
   rss = ET.Element("rss", version="2.0")
   channel = ET.SubElement(rss, "channel")
 
   ET.SubElement(channel, "title").text = "Daily Heating Oil Prices - Oak Ridge"
-  ET.SubElement(channel, "link").text = URL
+  # Top-level widget header links to your GitHub Pages chart dashboard
+  ET.SubElement(channel, "link").text = DASHBOARD_URL
   ET.SubElement(channel, "description").text = (
       f"Daily heating oil prices updated on {today}"
   )
@@ -141,7 +142,7 @@ def generate_rss(cash_rows, cc_rows, today):
       description=item1_desc,
       pub_date=item1_time,
       guid_str=f"oil-price-{today}-today",
-      link_url=f"{URL}#today-{today}",
+      link_url=f"{SOURCE_URL}#today-{today}",  # Links directly to source page
   )
 
   # Item 2: 7-Day History Log
@@ -157,12 +158,11 @@ def generate_rss(cash_rows, cc_rows, today):
         description=item2_desc,
         pub_date=item2_time,
         guid_str=f"oil-price-{today}-history",
-        link_url=f"{URL}#history-{today}",
+        link_url=f"{SOURCE_URL}#history-{today}",  # Links directly to source page
     )
 
   tree = ET.ElementTree(rss)
   tree.write("feed.xml", encoding="utf-8", xml_declaration=True)
-
 
 def extract_table_data(heading_element):
   """Extracts gallon tier and price columns from HTML tables."""
