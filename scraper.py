@@ -188,11 +188,11 @@ def extract_table_data(heading_element):
 
 
 def scrape_prices():
-  response = requests.get(URL, headers=HEADERS)
+  response = requests.get(SOURCE_URL, headers=HEADERS)
   if response.status_code != 200:
     print(f"Failed to fetch page: Status {response.status_code}")
     return
-
+      
   soup = BeautifulSoup(response.content, "html.parser")
   today = datetime.date.today().strftime("%Y-%m-%d")
 
