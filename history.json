@@ -233,5 +233,10 @@
     "date": "2026-11-26",
     "lowest_cash": 4.07,
     "lowest_cc": 4.07
+  },
+  {
+    "date": "2026-11-27",
+    "lowest_cash": 4.06,
+    "lowest_cc": 4.06
   }
 ]
